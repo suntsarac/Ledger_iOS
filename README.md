@@ -14,15 +14,11 @@ Ledger turns individual expenses into a clean, searchable spending history. Tran
 
 The interface pairs serif navigation and section titles with a restrained sans-serif body, adapts automatically between Sandstone in Light Mode and Midnight in Dark Mode, and uses native SwiftUI interactions throughout.
 
-<!--
-Add screenshots to docs/screenshots, then uncomment this block:
-
 <p align="center">
   <img src="docs/screenshots/transactions.png" width="30%" alt="Transactions">
   <img src="docs/screenshots/weekly-spending.png" width="30%" alt="Weekly spending">
   <img src="docs/screenshots/settings.png" width="30%" alt="Settings">
 </p>
--->
 
 ## Highlights
 
