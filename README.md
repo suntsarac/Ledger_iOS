@@ -10,14 +10,14 @@
   <img alt="Storage" src="https://img.shields.io/badge/storage-on--device-4C956C">
 </p>
 
-Ledger turns individual expenses into a clean, searchable spending history. Transactions can arrive from a Shortcuts automation, manual entry, a CSV file, or a note interpreted on-device with Apple Intelligence.
+Ledger turns individual expenses into a clean, searchable spending history. Transactions can arrive from a Shortcuts automation, manual entry, a CSV file, or a note interpreted on-device with Apple Foundation Models.
 
 The interface pairs serif navigation and section titles with a restrained sans-serif body, adapts automatically between Sandstone in Light Mode and Midnight in Dark Mode, and uses native SwiftUI interactions throughout.
 
 <p align="center">
-  <img src="docs/screenshots/transactions.jpeg" width="30%" alt="Transactions">
-  <img src="docs/screenshots/weekly-spending.jpeg" width="30%" alt="Weekly spending">
-  <img src="docs/screenshots/settings.jpeg" width="30%" alt="Settings">
+  <img src="docs/screenshots/transactions.jpeg" width="30%" alt="Transactions" style="border-radius: 16px;">
+  <img src="docs/screenshots/weekly-spending.jpeg" width="30%" alt="Weekly spending" style="border-radius: 16px;">
+  <img src="docs/screenshots/settings.jpeg" width="30%" alt="Settings" style="border-radius: 16px;">
 </p>
 
 ## Highlights
@@ -37,7 +37,7 @@ The interface pairs serif navigation and section titles with a restrained sans-s
 
 ### Transactions
 
-The main tab presents the current week's total, followed by a searchable transaction history grouped by month. Tap the weekly card to open category analytics, tap a transaction for its detail sheet, and swipe to manage entries.
+The main tab presents the current week's total, followed by a searchable transaction history grouped by month. Tap the weekly card to open category analytics, tap a transaction for its detail sheet, and use swipe actions for quick edits or deletion.
 
 ### Weekly spending
 
@@ -49,7 +49,7 @@ Settings contains the weekly-cover controls and every import path: manual entry,
 
 ## Apple Wallet and Shortcuts
 
-Apple does not expose a general-purpose API for third-party apps to read a person's complete Wallet transaction history. Ledger instead provides an `Add Expense` App Intent that can receive transaction data from Shortcuts.
+Apple does not expose a general-purpose API for third-party apps to read a person's complete Wallet transaction history. Ledger instead provides an `Add Expense` App Intent that can receive transaction data from a Shortcuts automation.
 
 To configure it:
 
@@ -84,7 +84,7 @@ Rules:
 
 ## Importing from notes
 
-Paste free-form expense notes into Ledger and review the extracted transactions before saving them. The on-device language model identifies the merchant, amount, date, category, and card without sending data elsewhere.
+Paste free-form expense notes into Ledger and review the extracted transactions before saving them. The on-device language model identifies the merchant, amount, date, category, and card without sending the note to a third-party service.
 
 This feature requires an Apple Intelligence-capable device with Apple Intelligence enabled and its model ready. Extracted data should still be reviewed before import.
 
@@ -141,4 +141,4 @@ Before distributing the app, review Apple's current privacy-manifest, App Store 
 
 Ledger is an early-stage project. Interfaces and data formats may change while the app is developed.
 
-Contributions and thoughtful issue reports are welcome. When reporting a problem, include the iOS version, device or simulator model, and the steps needed to reproduce it. Never attach real financial data unless the person already has that information and consented to share it.
+Contributions and thoughtful issue reports are welcome. When reporting a problem, include the iOS version, device or simulator model, and the steps needed to reproduce it. Never attach real financial data.
