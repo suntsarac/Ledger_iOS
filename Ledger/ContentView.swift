@@ -1,7 +1,9 @@
 import AppIntents
 import Charts
+import PhotosUI
 import SwiftData
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
@@ -11,6 +13,15 @@ struct ContentView: View {
     @Environment(\.colorScheme)
     private var colorScheme
 
+    @State private var weeklyCoverImageData: Data?
+
+    init() {
+        _weeklyCoverImageData = State(initialValue: WeeklyCoverStore.load())
+        #if canImport(UIKit)
+        configureNavigationBarAppearance()
+        #endif
+    }
+
     private var selectedTheme: AppTheme {
         colorScheme == .dark ? .midnight : .sandstone
     }
@@ -18,22 +29,26 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             selectedTheme.background
-                .ignoresSafeArea()
 
             TabView {
                 TransactionsView(
                     expenses: expenses,
-                    theme: selectedTheme
+                    theme: selectedTheme,
+                    weeklyCoverImageData: weeklyCoverImageData
                 )
                 .tabItem {
                     Label("Transactions", systemImage: "list.bullet.rectangle.fill")
                 }
 
-                SettingsView(theme: selectedTheme)
+                SettingsView(
+                    theme: selectedTheme,
+                    weeklyCoverImageData: $weeklyCoverImageData
+                )
                     .tabItem {
                         Label("Settings", systemImage: "gearshape.fill")
                     }
             }
+            .toolbarBackground(.hidden, for: .tabBar)
         }
         .tint(selectedTheme.accent)
         .font(.system(.body, design: .default))
@@ -43,8 +58,10 @@ struct ContentView: View {
 private struct TransactionsView: View {
     let expenses: [ExpenseRecord]
     let theme: AppTheme
+    let weeklyCoverImageData: Data?
 
     @State private var query = ""
+    @State private var showsCompactTitle = false
 
     private var currentWeekExpenses: [ExpenseRecord] {
         expenses.filter {
@@ -97,7 +114,8 @@ private struct TransactionsView: View {
                         WeeklySummaryCard(
                             amount: currentWeekTotal,
                             count: currentWeekExpenses.count,
-                            theme: theme
+                            theme: theme,
+                            coverImageData: weeklyCoverImageData
                         )
                     }
                     .buttonStyle(.plain)
@@ -124,17 +142,88 @@ private struct TransactionsView: View {
                 .padding(.bottom, 34)
             }
             .swipeActionsContainer()
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 48
+            } action: { _, isCollapsed in
+                showsCompactTitle = isCollapsed
+            }
+            .scrollContentBackground(.hidden)
             .background(theme.background)
             .navigationTitle("Transactions")
             .toolbarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .largeTitle) {
+                    Text("Transactions")
+                        .font(.system(.largeTitle, design: .serif, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                ToolbarItem(placement: .title) {
+                    Text("Transactions")
+                        .font(.system(.headline, design: .serif, weight: .bold))
+                        .opacity(showsCompactTitle ? 1 : 0)
+                        .accessibilityHidden(!showsCompactTitle)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
     }
+}
+
+private struct GrainOverlay: View {
+    let theme: AppTheme
+
+    var body: some View {
+        Image(uiImage: GrainTexture.image)
+            .resizable(resizingMode: .tile)
+            .blendMode(.overlay)
+            .opacity(theme == .midnight ? 0.08 : 0.065)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .ignoresSafeArea()
+    }
+}
+
+private enum GrainTexture {
+    static let image: UIImage = {
+        let size = 128
+        var pixels = [UInt8](repeating: 0, count: size * size)
+
+        var seed: UInt64 = 0x4d595f475241494e
+        func nextRandom() -> UInt8 {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return UInt8(truncatingIfNeeded: seed >> 56)
+        }
+
+        for i in 0..<pixels.count {
+            pixels[i] = nextRandom()
+        }
+
+        let colorSpace = CGColorSpaceCreateDeviceGray()
+        guard let context = CGContext(
+            data: &pixels,
+            width: size,
+            height: size,
+            bitsPerComponent: 8,
+            bytesPerRow: size,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ), let cgImage = context.makeImage() else {
+            return UIImage()
+        }
+        return UIImage(cgImage: cgImage, scale: 1.0, orientation: .up)
+    }()
 }
 
 private struct WeeklySummaryCard: View {
     let amount: Double
     let count: Int
     let theme: AppTheme
+    let coverImageData: Data?
+
+    private var coverImage: UIImage? {
+        coverImageData.flatMap(UIImage.init(data:))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -163,7 +252,26 @@ private struct WeeklySummaryCard: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(22)
-        .background(theme.summaryGradient, in: .rect(cornerRadius: 28))
+        .background {
+            if let coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .overlay {
+                        LinearGradient(
+                            colors: [
+                                .black.opacity(0.18),
+                                .black.opacity(0.58)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+            } else {
+                theme.summaryGradient
+            }
+        }
+        .clipShape(.rect(cornerRadius: 28))
         .shadow(color: theme.accent.opacity(0.22), radius: 18, y: 10)
     }
 }
@@ -278,9 +386,11 @@ private struct WeeklyCategoryView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 34)
         }
+        .scrollContentBackground(.hidden)
         .background(theme.background)
         .navigationTitle("Weekly spending")
         .toolbarTitleDisplayMode(.large)
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 }
 
@@ -397,42 +507,42 @@ private struct TransactionMonthSection: View {
                         selectedExpense = expense
                     } label: {
                         ExpenseRow(expense: expense)
+                            .padding(.horizontal, 20)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                        .buttonStyle(.plain)
-                        .contentShape(.rect)
-                        .accessibilityHint("Shows transaction details")
-                        .swipeActions(
-                            edge: .trailing,
-                            allowsFullSwipe: true
-                        ) {
-                            Button(role: .destructive) {
-                                delete(expense)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-
-                            Button {
-                                editingExpense = expense
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-                            .tint(theme.accent)
+                    .buttonStyle(.plain)
+                    .contentShape(.rect)
+                    .accessibilityHint("Shows transaction details")
+                    .swipeActions(
+                        edge: .trailing,
+                        allowsFullSwipe: true
+                    ) {
+                        Button(role: .destructive) {
+                            delete(expense)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
-                        .clipShape(.rect)
+
+                        Button {
+                            editingExpense = expense
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(theme.accent)
+                    }
 
                     if expense.persistentModelID != month.expenses.last?.persistentModelID {
                         Divider()
-                            .padding(.leading, 58)
+                            .padding(.leading, 75)
                     }
                 }
             }
-            .padding(.horizontal, 20)
             .background(theme.cardColor, in: .rect(cornerRadius: 24))
             .clipShape(.rect(cornerRadius: 24))
             .overlay {
                 RoundedRectangle(cornerRadius: 24)
                     .stroke(theme.borderColor)
+                    .allowsHitTesting(false)
             }
         }
         .sheet(item: $editingExpense) { expense in
@@ -440,14 +550,20 @@ private struct TransactionMonthSection: View {
                 expense: expense,
                 theme: theme
             )
+            .presentationBackground {
+                theme.background
+            }
         }
         .sheet(item: $selectedExpense) { expense in
             TransactionDetailView(
                 expense: expense,
                 theme: theme
             )
-            .presentationDetents([.large])
+            .presentationDetents([.fraction(0.62), .large])
             .presentationDragIndicator(.visible)
+            .presentationBackground {
+                theme.background
+            }
         }
         .alert(
             "Couldn’t delete transaction",
@@ -541,24 +657,24 @@ private struct TransactionDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
-                    VStack(spacing: 12) {
+                VStack(spacing: 18) {
+                    VStack(spacing: 8) {
                         Image(systemName: expense.expenseCategory.symbol)
-                            .font(.system(size: 28, weight: .semibold))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(expense.expenseCategory.color)
-                            .frame(width: 64, height: 64)
+                            .frame(width: 52, height: 52)
                             .background(
                                 expense.expenseCategory.color.opacity(0.14),
                                 in: Circle()
                             )
 
                         Text(expense.amount, format: .currency(code: "EUR"))
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
                             .minimumScaleFactor(0.65)
                             .lineLimit(1)
 
                         Text(expense.merchant)
-                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .font(.system(.title3, design: .serif, weight: .semibold))
                             .multilineTextAlignment(.center)
 
                         Text(expense.date, format: .dateTime.weekday(.wide).day().month(.wide).year().hour().minute())
@@ -601,12 +717,19 @@ private struct TransactionDetailView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 28)
+                .padding(.bottom, 16)
             }
+            .scrollContentBackground(.hidden)
             .background(theme.background)
             .navigationTitle("Transaction")
             .toolbarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Transaction")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
@@ -633,7 +756,13 @@ private struct TransactionDetailView: View {
                     expense: expense,
                     theme: theme
                 )
+                .presentationBackground {
+                    theme.background
+                }
             }
+        }
+        .presentationBackground {
+            theme.background
         }
     }
 }
@@ -659,7 +788,7 @@ private struct TransactionDetailRow: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
     }
 }
 
@@ -673,6 +802,7 @@ private struct ExpenseMonth: Identifiable {
 
 private struct SettingsView: View {
     let theme: AppTheme
+    @Binding var weeklyCoverImageData: Data?
 
     @State private var isShowingManualEntry = false
     @State private var isShowingNotesImport = false
@@ -680,11 +810,17 @@ private struct SettingsView: View {
     @State private var isShowingImportAlert = false
     @State private var importMessage = ""
     @State private var isImporting = false
+    @State private var showsCompactTitle = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
+                    WeeklyCoverSettingsCard(
+                        theme: theme,
+                        coverImageData: $weeklyCoverImageData
+                    )
+
                     ImportSettingsCard(
                         theme: theme,
                         isImporting: isImporting,
@@ -700,17 +836,44 @@ private struct SettingsView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 34)
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 48
+            } action: { _, isCollapsed in
+                showsCompactTitle = isCollapsed
+            }
+            .scrollContentBackground(.hidden)
             .background(theme.background)
             .navigationTitle("Settings")
             .toolbarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .largeTitle) {
+                    Text("Settings")
+                        .font(.system(.largeTitle, design: .serif, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                ToolbarItem(placement: .title) {
+                    Text("Settings")
+                        .font(.system(.headline, design: .serif, weight: .bold))
+                        .opacity(showsCompactTitle ? 1 : 0)
+                        .accessibilityHidden(!showsCompactTitle)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
             .sheet(isPresented: $isShowingManualEntry) {
                 ManualExpenseView(theme: theme) { message in
                     showImportResult(message)
+                }
+                .presentationBackground {
+                    theme.background
                 }
             }
             .sheet(isPresented: $isShowingNotesImport) {
                 NoteImportView(theme: theme) { message in
                     showImportResult(message)
+                }
+                .presentationBackground {
+                    theme.background
                 }
             }
             .fileImporter(
@@ -830,6 +993,137 @@ private struct ImportSettingsCard: View {
             }
             .buttonStyle(.plain)
             .disabled(isImporting)
+        }
+    }
+}
+
+private struct WeeklyCoverSettingsCard: View {
+    let theme: AppTheme
+    @Binding var coverImageData: Data?
+
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isLoadingPhoto = false
+    @State private var errorMessage: String?
+
+    private var coverImage: UIImage? {
+        coverImageData.flatMap(UIImage.init(data:))
+    }
+
+    var body: some View {
+        SettingsCard(
+            title: "Weekly spending cover",
+            subtitle: "Personalize the summary card on Transactions",
+            theme: theme
+        ) {
+            if let coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 140)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(.rect(cornerRadius: 18))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(theme.borderColor)
+                    }
+                    .accessibilityLabel("Current weekly spending cover")
+            } else {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(theme.summaryGradient)
+                    .frame(height: 100)
+                    .overlay {
+                        Label("Default cover", systemImage: "chart.bar.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Default weekly spending cover")
+            }
+
+            PhotosPicker(
+                selection: $selectedPhoto,
+                matching: .images
+            ) {
+                SettingsActionLabel(
+                    title: coverImageData == nil ? "Choose photo" : "Change photo",
+                    detail: "Select an image from your photo library",
+                    symbol: "photo.on.rectangle.angled",
+                    theme: theme
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isLoadingPhoto)
+
+            if isLoadingPhoto {
+                ProgressView("Preparing cover…")
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if coverImageData != nil {
+                Divider()
+
+                Button(role: .destructive) {
+                    removeCoverPhoto()
+                } label: {
+                    Label("Remove photo and restore default", systemImage: "arrow.uturn.backward.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoadingPhoto)
+            }
+        }
+        .onChange(of: selectedPhoto) { _, newPhoto in
+            guard let newPhoto else { return }
+            loadCoverPhoto(from: newPhoto)
+        }
+        .alert(
+            "Couldn’t update cover",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func loadCoverPhoto(from item: PhotosPickerItem) {
+        isLoadingPhoto = true
+        errorMessage = nil
+
+        Task {
+            do {
+                guard let sourceData = try await item.loadTransferable(type: Data.self) else {
+                    throw WeeklyCoverError.unsupportedImage
+                }
+
+                let preparedData = try WeeklyCoverStore.savePhotoData(sourceData)
+
+                coverImageData = preparedData
+                isLoadingPhoto = false
+            } catch {
+                selectedPhoto = nil
+                isLoadingPhoto = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeCoverPhoto() {
+        do {
+            try WeeklyCoverStore.remove()
+            selectedPhoto = nil
+            coverImageData = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
@@ -975,13 +1269,22 @@ private struct NoteImportView: View {
             .background(theme.background)
             .navigationTitle("Import from Notes")
             .toolbarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Import from Notes")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                }
+
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
                 }
             }
+        }
+        .presentationBackground {
+            theme.background
         }
     }
 
@@ -1261,7 +1564,13 @@ private struct EditExpenseView: View {
             .background(theme.background)
             .navigationTitle("Edit transaction")
             .toolbarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Edit transaction")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                }
+
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
@@ -1277,6 +1586,9 @@ private struct EditExpenseView: View {
             .onAppear {
                 loadExpenseOnce()
             }
+        }
+        .presentationBackground {
+            theme.background
         }
     }
 
@@ -1385,7 +1697,13 @@ private struct ManualExpenseView: View {
             .background(theme.background)
             .navigationTitle("Add transaction")
             .toolbarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Add transaction")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                }
+
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
@@ -1399,6 +1717,9 @@ private struct ManualExpenseView: View {
                     .disabled(isSaving)
                 }
             }
+        }
+        .presentationBackground {
+            theme.background
         }
     }
 
@@ -1487,7 +1808,7 @@ private enum AppTheme {
         }
     }
 
-    var background: LinearGradient {
+    var gradient: LinearGradient {
         switch self {
         case .midnight:
             LinearGradient(
@@ -1510,6 +1831,17 @@ private enum AppTheme {
                 endPoint: .bottomTrailing
             )
         }
+    }
+
+    @ViewBuilder
+    var background: some View {
+        ZStack {
+            gradient
+                .ignoresSafeArea()
+
+            GrainOverlay(theme: self)
+        }
+        .ignoresSafeArea()
     }
 
     var summaryGradient: LinearGradient {
@@ -1593,9 +1925,62 @@ private extension ExpenseCategory {
 }
 
 #Preview {
-    ContentView()
-        .modelContainer(
-            for: ExpenseRecord.self,
-            inMemory: true
+    let container = try! ModelContainer(
+        for: ExpenseRecord.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    container.mainContext.insert(
+        ExpenseRecord(
+            fingerprint: "1",
+            merchant: "Corner Café",
+            amount: 12.50,
+            date: .now,
+            category: .dining,
+            cardName: "Personal Visa",
+            source: .manual
         )
+    )
+    container.mainContext.insert(
+        ExpenseRecord(
+            fingerprint: "2",
+            merchant: "Supermarket",
+            amount: 45.80,
+            date: .now.addingTimeInterval(-3600),
+            category: .groceries,
+            cardName: "Personal Visa",
+            source: .manual
+        )
+    )
+    return ContentView()
+        .modelContainer(container)
+}
+#Preview("Detail Light") {
+    TransactionDetailView(
+        expense: ExpenseRecord(
+            fingerprint: "1",
+            merchant: "Conad City",
+            amount: 14.03,
+            date: .now,
+            category: .shopping,
+            cardName: "Unknown card",
+            source: .notes
+        ),
+        theme: .sandstone
+    )
+}
+
+#Preview("Detail Dark") {
+    TransactionDetailView(
+        expense: ExpenseRecord(
+            fingerprint: "1",
+            merchant: "Conad City",
+            amount: 14.03,
+            date: .now,
+            category: .shopping,
+            cardName: "Unknown card",
+            source: .notes
+        ),
+        theme: .midnight
+    )
+    .preferredColorScheme(.dark)
 }
